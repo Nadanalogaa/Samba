@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Search, Plus, Edit, X, Check, AlertCircle, Users, ChevronDown, Filter } from 'lucide-react';
+import { Search, Plus, Edit, X, Check, AlertCircle, Users } from 'lucide-react';
 import { customerApi, configApi } from '../../services/cashBillApi';
 
 interface Customer {

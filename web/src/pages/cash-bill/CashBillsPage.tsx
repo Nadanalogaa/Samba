@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Printer, FileText, Search } from 'lucide-react';
+import { Printer } from 'lucide-react';
 import { billApi } from '../../services/cashBillApi';
 
 interface Bill { id: number; bill_no: string; bill_date: string; net_amount: number; district_code: string; total_qty: number; subtotal: number; discount_percent: number; discount_amount: number; customer_name: string; customer_code: string; print_count: number; }
