@@ -1,4 +1,4 @@
-const BASE = 'http://localhost:3001/api/cash';
+const BASE = (import.meta.env.VITE_API_URL || 'http://localhost:3001') + '/api/cash';
 
 function getToken() {
   return localStorage.getItem('cash-bill-token') || '';
