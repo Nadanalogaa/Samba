@@ -103,6 +103,7 @@ CREATE TABLE cash_orders (
   walk_in_address1 VARCHAR(100),
   walk_in_address2 VARCHAR(100),
   walk_in_pin VARCHAR(10),
+  walk_in_email VARCHAR(100),
   discount_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
   subtotal NUMERIC(10,2) NOT NULL DEFAULT 0,
   discount_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
@@ -124,6 +125,8 @@ CREATE TABLE cash_order_items (
   book_id INTEGER NOT NULL REFERENCES rate_master(id),
   qty INTEGER NOT NULL,
   rate NUMERIC(8,2) NOT NULL,
+  discount_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
+  discount_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
   amount NUMERIC(10,2) NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );

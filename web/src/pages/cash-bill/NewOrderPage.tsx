@@ -6,7 +6,7 @@ import ConfirmDialog from '../../components/cash-bill/ConfirmDialog';
 
 interface Book { id: number; book_code: string; standard: string; title_name: string; short_title: string; rate: number; }
 interface Customer { id: number; customer_code: string; customer_name: string; customer_type: string; discount_percent: number; district_code: string; contact_person: string; phone: string; }
-interface LineItem { book: Book; qty: number; amount: number; }
+interface LineItem { book: Book; qty: number; discount_percent: number; amount: number; }
 
 export default function NewOrderPage() {
   const navigate = useNavigate();
@@ -21,6 +21,9 @@ export default function NewOrderPage() {
   const [walkInAddr1, setWalkInAddr1] = useState('');
   const [walkInAddr2, setWalkInAddr2] = useState('');
   const [walkInPin, setWalkInPin] = useState('');
+  const [walkInEmail, setWalkInEmail] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [books, setBooks] = useState<Book[]>([]);
   const [items, setItems] = useState<LineItem[]>([]);
   const [codeInput, setCodeInput] = useState('');
@@ -73,13 +76,20 @@ export default function NewOrderPage() {
     setHighlightIdx(0);
   }, [codeInput, books]);
 
+  const computeItemAmount = (rate: number, qty: number, discPct: number) => {
+    const gross = rate * qty;
+    return Math.round((gross - gross * discPct / 100) * 100) / 100;
+  };
+
   const addLineItem = (book: Book, qty: number) => {
     const rate = Number(book.rate);
     const existing = items.find(i => i.book.id === book.id);
     if (existing) {
-      setItems(items.map(it => it.book.id === book.id ? { ...it, qty: it.qty + qty, amount: Number(it.book.rate) * (it.qty + qty) } : it));
+      setItems(items.map(it => it.book.id === book.id
+        ? { ...it, qty: it.qty + qty, amount: computeItemAmount(Number(it.book.rate), it.qty + qty, it.discount_percent) }
+        : it));
     } else {
-      setItems([...items, { book: { ...book, rate }, qty, amount: rate * qty }]);
+      setItems([...items, { book: { ...book, rate }, qty, discount_percent: 0, amount: computeItemAmount(rate, qty, 0) }]);
     }
   };
 
@@ -140,7 +150,16 @@ export default function NewOrderPage() {
 
   const updateQty = (idx: number, qty: number) => {
     if (qty < 1) return;
-    setItems(items.map((it, i) => i === idx ? { ...it, qty, amount: Number(it.book.rate) * qty } : it));
+    setItems(items.map((it, i) => i === idx
+      ? { ...it, qty, amount: computeItemAmount(Number(it.book.rate), qty, it.discount_percent) }
+      : it));
+  };
+
+  const updateItemDiscount = (idx: number, pct: number) => {
+    if (pct < 0 || pct > 100) return;
+    setItems(items.map((it, i) => i === idx
+      ? { ...it, discount_percent: pct, amount: computeItemAmount(Number(it.book.rate), it.qty, pct) }
+      : it));
   };
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx));
@@ -162,9 +181,10 @@ export default function NewOrderPage() {
         walk_in_address1: selectedCustomer ? '' : walkInAddr1,
         walk_in_address2: selectedCustomer ? '' : walkInAddr2,
         walk_in_pin: selectedCustomer ? '' : walkInPin,
+        walk_in_email: selectedCustomer ? '' : walkInEmail,
         discount_percent: discountPercent,
         district_code: district,
-        items: items.map(i => ({ book_id: i.book.id, qty: i.qty })),
+        items: items.map(i => ({ book_id: i.book.id, qty: i.qty, discount_percent: i.discount_percent })),
       });
 
       setConfirmAction(null);
@@ -241,9 +261,17 @@ export default function NewOrderPage() {
                 className="w-full px-3 py-2 rounded-xl border text-sm" style={{ backgroundColor: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }} />
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--theme-text)' }}>Mobile</label>
-              <input value={contactMobile} onChange={e => setContactMobile(e.target.value)} placeholder="Phone number"
-                className="w-full px-3 py-2 rounded-xl border text-sm" style={{ backgroundColor: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }} />
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--theme-text)' }}>Mobile <span className="text-[10px]" style={{ color: 'var(--theme-text-secondary)' }}>(10 digits, India)</span></label>
+              <input value={contactMobile}
+                onChange={e => {
+                  const v = e.target.value.replace(/\D/g, '').slice(0, 10);
+                  setContactMobile(v);
+                  if (v && !/^[6-9]\d{9}$/.test(v)) setPhoneError('Must be 10 digits starting with 6-9');
+                  else setPhoneError('');
+                }}
+                placeholder="9876543210" maxLength={10} inputMode="numeric"
+                className="w-full px-3 py-2 rounded-xl border text-sm" style={{ backgroundColor: 'var(--theme-surface)', borderColor: phoneError ? '#ef4444' : 'var(--theme-border)', color: 'var(--theme-text)' }} />
+              {phoneError && <p className="text-[10px] text-red-500 mt-0.5">{phoneError}</p>}
             </div>
           </div>
 
@@ -273,6 +301,18 @@ export default function NewOrderPage() {
                   <label className="block text-xs font-medium mb-1" style={{ color: 'var(--theme-text)' }}>Address Line 2</label>
                   <input value={walkInAddr2} onChange={e => setWalkInAddr2(e.target.value)} placeholder="City, State"
                     className="w-full px-3 py-2 rounded-xl border text-sm" style={{ backgroundColor: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }} />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--theme-text)' }}>Email</label>
+                  <input type="email" value={walkInEmail}
+                    onChange={e => {
+                      setWalkInEmail(e.target.value);
+                      if (e.target.value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.target.value)) setEmailError('Invalid email');
+                      else setEmailError('');
+                    }}
+                    placeholder="customer@example.com"
+                    className="w-full px-3 py-2 rounded-xl border text-sm" style={{ backgroundColor: 'var(--theme-surface)', borderColor: emailError ? '#ef4444' : 'var(--theme-border)', color: 'var(--theme-text)' }} />
+                  {emailError && <p className="text-[10px] text-red-500 mt-0.5">{emailError}</p>}
                 </div>
               </div>
             </div>
@@ -409,6 +449,7 @@ export default function NewOrderPage() {
                     <th className="text-center px-2 py-2 font-medium w-16">Std</th>
                     <th className="text-center px-2 py-2 font-medium w-32">Qty</th>
                     <th className="text-right px-2 py-2 font-medium w-20">Rate</th>
+                    <th className="text-center px-2 py-2 font-medium w-20">Disc %</th>
                     <th className="text-right px-2 py-2 font-medium w-24">Amount</th>
                     <th className="w-10"></th>
                   </tr>
@@ -431,6 +472,11 @@ export default function NewOrderPage() {
                         </div>
                       </td>
                       <td className="px-2 py-2 text-right">₹{Number(item.book.rate).toFixed(2)}</td>
+                      <td className="px-2 py-2 text-center">
+                        <input type="number" value={item.discount_percent} onChange={e => updateItemDiscount(idx, +e.target.value || 0)}
+                          min={0} max={100} step={0.5}
+                          className="w-16 text-center rounded border text-xs py-1" style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }} />
+                      </td>
                       <td className="px-2 py-2 text-right font-bold">₹{Number(item.amount).toFixed(2)}</td>
                       <td className="px-2 py-2">
                         <button onClick={() => removeItem(idx)} className="p-1 text-red-400 hover:text-red-600"><Trash2 size={13} /></button>
@@ -442,7 +488,7 @@ export default function NewOrderPage() {
                   <tr className="border-t" style={{ borderColor: 'var(--theme-border)', backgroundColor: 'var(--theme-surface-alt)' }}>
                     <td colSpan={4}></td>
                     <td className="px-2 py-2 text-center font-bold" style={{ color: 'var(--theme-text)' }}>{totalQty}</td>
-                    <td></td>
+                    <td colSpan={2}></td>
                     <td className="px-2 py-2 text-right font-bold text-primary-500">₹{subtotal.toFixed(2)}</td>
                     <td></td>
                   </tr>

@@ -1,6 +1,20 @@
 import { useState, useEffect } from 'react';
-import { Calendar, BarChart3, Users, BookOpen, MapPin } from 'lucide-react';
+import { Calendar, BarChart3, Users, BookOpen, MapPin, Download } from 'lucide-react';
 import { reportApi } from '../../services/cashBillApi';
+
+function exportToCSV(filename: string, headers: string[], rows: (string | number)[][]) {
+  const escape = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csv = [headers.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
 type Tab = 'dayEnd' | 'billList' | 'customerWise' | 'bookWise' | 'districtComparison';
 
@@ -32,6 +46,38 @@ export default function CashReportsPage() {
   };
 
   useEffect(() => { load(); }, [tab, date, from, to, district]);
+
+  const handleDownload = () => {
+    if (!data) return;
+    const stamp = `${from || date}_to_${to || date}`;
+    switch (tab) {
+      case 'dayEnd':
+        exportToCSV(`day-end_${date}.csv`,
+          ['Bill No', 'Customer', 'District', 'Qty', 'Net Amount'],
+          (data.bills || []).map((b: any) => [b.bill_no, b.customer_name || 'Walk-in', b.district_code, b.total_qty, Number(b.net_amount).toFixed(2)]));
+        break;
+      case 'billList':
+        exportToCSV(`bills_${stamp}.csv`,
+          ['Bill No', 'Date', 'Customer', 'Qty', 'Subtotal', 'Disc%', 'Net Amount'],
+          (data.bills || []).map((b: any) => [b.bill_no, new Date(b.bill_date).toLocaleDateString('en-IN'), b.customer_name || 'Walk-in', b.total_qty, Number(b.subtotal).toFixed(2), b.discount_percent, Number(b.net_amount).toFixed(2)]));
+        break;
+      case 'customerWise':
+        exportToCSV(`customer-wise_${stamp}.csv`,
+          ['Code', 'Customer', 'Type', 'District', 'Bills', 'Qty', 'Gross', 'Discount', 'Net'],
+          (data as any[]).map((r: any) => [r.customer_code, r.customer_name, r.customer_type, r.district_code, r.bill_count, r.total_qty, Number(r.gross_amount).toFixed(2), Number(r.total_discount).toFixed(2), Number(r.net_amount).toFixed(2)]));
+        break;
+      case 'bookWise':
+        exportToCSV(`book-wise_${stamp}.csv`,
+          ['Code', 'Title', 'Standard', 'Rate', 'Total Qty', 'Total Amount', 'Bills'],
+          (data as any[]).map((r: any) => [r.book_code, r.title_name, r.standard, Number(r.rate).toFixed(2), r.total_qty, Number(r.total_amount).toFixed(2), r.bill_count]));
+        break;
+      case 'districtComparison':
+        exportToCSV(`district-comparison_${stamp}.csv`,
+          ['District', 'Name', 'Bills', 'Qty', 'Net Amount', 'Discount', 'Unique Customers'],
+          (data as any[]).map((d: any) => [d.district_code, d.district_name, d.bill_count, d.total_qty, Number(d.total_amount).toFixed(2), Number(d.total_discount).toFixed(2), d.unique_customers]));
+        break;
+    }
+  };
 
   const tabs: { key: Tab; label: string; icon: any }[] = [
     { key: 'dayEnd', label: 'Day End', icon: Calendar },
@@ -87,6 +133,10 @@ export default function CashReportsPage() {
             </select>
           </div>
         )}
+        <button onClick={handleDownload} disabled={!data}
+          className="ml-auto flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-accent-500 text-white hover:bg-accent-600 disabled:opacity-40">
+          <Download size={13} /> Download CSV
+        </button>
       </div>
 
       {loading ? (

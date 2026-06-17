@@ -5,7 +5,7 @@ import ConfirmDialog from '../../components/cash-bill/ConfirmDialog';
 
 interface Order { id: number; order_no: string; order_date: string; customer_name: string; customer_code: string; total_qty: number; subtotal: number; discount_percent: number; discount_amount: number; net_amount: number; district_code: string; status: string; item_count: number; contact_person: string; }
 interface Book { id: number; book_code: string; standard: string; title_name: string; short_title: string; rate: number; }
-interface EditItem { book: Book; qty: number; amount: number; }
+interface EditItem { book: Book; qty: number; discount_percent: number; amount: number; }
 
 export default function CashOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -89,7 +89,8 @@ export default function CashOrdersPage() {
       const items: EditItem[] = (detail.items || []).map((it: any) => ({
         book: { id: it.book_id, book_code: it.book_code, standard: it.standard, title_name: it.title_name, short_title: it.short_title, rate: Number(it.rate) },
         qty: Number(it.qty),
-        amount: Number(it.rate) * Number(it.qty),
+        discount_percent: Number(it.discount_percent || 0),
+        amount: Number(it.amount),
       }));
       setEditItems(items);
       setCodeInput('');
@@ -116,22 +117,34 @@ export default function CashOrdersPage() {
       qtyRef.current?.focus();
       return;
     }
+    const calcAmt = (rate: number, q: number, p: number) => {
+      const g = rate * q; return Math.round((g - g * p / 100) * 100) / 100;
+    };
     const existing = editItems.find(i => i.book.id === matchedBook.id);
     if (existing) {
       setEditItems(editItems.map(it => it.book.id === matchedBook.id
-        ? { ...it, qty: it.qty + qtyNum, amount: it.book.rate * (it.qty + qtyNum) }
+        ? { ...it, qty: it.qty + qtyNum, amount: calcAmt(it.book.rate, it.qty + qtyNum, it.discount_percent) }
         : it));
     } else {
-      setEditItems([...editItems, { book: matchedBook, qty: qtyNum, amount: matchedBook.rate * qtyNum }]);
+      setEditItems([...editItems, { book: matchedBook, qty: qtyNum, discount_percent: 0, amount: calcAmt(matchedBook.rate, qtyNum, 0) }]);
     }
     setCodeInput('');
     setQtyInput('');
     setTimeout(() => codeRef.current?.focus(), 0);
   };
 
+  const calcEditAmt = (rate: number, qty: number, pct: number) => {
+    const g = rate * qty; return Math.round((g - g * pct / 100) * 100) / 100;
+  };
+
   const editUpdateQty = (idx: number, qty: number) => {
     if (qty < 1) return;
-    setEditItems(editItems.map((it, i) => i === idx ? { ...it, qty, amount: it.book.rate * qty } : it));
+    setEditItems(editItems.map((it, i) => i === idx ? { ...it, qty, amount: calcEditAmt(it.book.rate, qty, it.discount_percent) } : it));
+  };
+
+  const editUpdateDiscount = (idx: number, pct: number) => {
+    if (pct < 0 || pct > 100) return;
+    setEditItems(editItems.map((it, i) => i === idx ? { ...it, discount_percent: pct, amount: calcEditAmt(it.book.rate, it.qty, pct) } : it));
   };
 
   const editRemoveItem = (idx: number) => setEditItems(editItems.filter((_, i) => i !== idx));
@@ -141,7 +154,7 @@ export default function CashOrdersPage() {
     setEditSaving(true);
     try {
       await orderApi.updateItems(editOrder.id, {
-        items: editItems.map(i => ({ book_id: i.book.id, qty: i.qty })),
+        items: editItems.map(i => ({ book_id: i.book.id, qty: i.qty, discount_percent: i.discount_percent })),
         discount_percent: editDiscount,
       });
       setEditOrder(null);
@@ -164,6 +177,12 @@ export default function CashOrdersPage() {
 
   const printBill = async (billId: number) => {
     const blob = await billApi.pdf(billId);
+    const url = URL.createObjectURL(blob as Blob);
+    window.open(url, '_blank');
+  };
+
+  const printProforma = async (orderId: number) => {
+    const blob = await orderApi.pdf(orderId);
     const url = URL.createObjectURL(blob as Blob);
     window.open(url, '_blank');
   };
@@ -238,6 +257,7 @@ export default function CashOrdersPage() {
                     {o.status === 'proforma' && (
                       <>
                         <button onClick={() => openEdit(o)} className="p-1.5 rounded-lg text-secondary-500 hover:bg-secondary-50" title="Modify Proforma"><Pencil size={13} /></button>
+                        <button onClick={() => printProforma(o.id)} className="p-1.5 rounded-lg text-primary-500 hover:bg-primary-50" title="Print Proforma"><Printer size={13} /></button>
                         <button onClick={() => setConfirmOrder(o)} className="p-1.5 rounded-lg text-accent-500 hover:bg-accent-50" title="Generate Bill"><FileText size={13} /></button>
                       </>
                     )}
@@ -390,6 +410,7 @@ export default function CashOrdersPage() {
                           <th className="text-left px-2 py-2 font-medium">Book</th>
                           <th className="text-center px-2 py-2 font-medium w-32">Qty</th>
                           <th className="text-right px-2 py-2 font-medium w-20">Rate</th>
+                          <th className="text-center px-2 py-2 font-medium w-20">Disc %</th>
                           <th className="text-right px-2 py-2 font-medium w-24">Amount</th>
                           <th className="w-10"></th>
                         </tr>
@@ -408,6 +429,11 @@ export default function CashOrdersPage() {
                               </div>
                             </td>
                             <td className="px-2 py-2 text-right">₹{it.book.rate.toFixed(2)}</td>
+                            <td className="px-2 py-2 text-center">
+                              <input type="number" value={it.discount_percent} onChange={e => editUpdateDiscount(idx, +e.target.value || 0)}
+                                min={0} max={100} step={0.5}
+                                className="w-16 text-center rounded border text-xs py-1" style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }} />
+                            </td>
                             <td className="px-2 py-2 text-right font-bold">₹{it.amount.toFixed(2)}</td>
                             <td className="px-2 py-2">
                               <button onClick={() => editRemoveItem(idx)} className="p-1 text-red-400 hover:text-red-600"><Trash2 size={13} /></button>

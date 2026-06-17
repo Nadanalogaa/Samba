@@ -70,6 +70,7 @@ export const orderApi = {
   create: (data: any) => request('/orders', { method: 'POST', body: JSON.stringify(data) }),
   updateItems: (id: number, data: any) => request(`/orders/${id}/items`, { method: 'PUT', body: JSON.stringify(data) }),
   generateBill: (id: number) => request(`/orders/${id}/generate-bill`, { method: 'POST' }),
+  pdf: (id: number) => request(`/orders/${id}/pdf`),
 };
 
 // Bills
